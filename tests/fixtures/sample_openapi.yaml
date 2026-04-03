@@ -1,0 +1,144 @@
+openapi: "3.1.0"
+info:
+  title: Sample API
+  version: "1.0.0"
+paths:
+  /users:
+    get:
+      summary: List all users
+      tags:
+        - users
+      parameters:
+        - name: skip
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserResponse"
+    post:
+      summary: Create user
+      tags:
+        - users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+  /users/{user_id}:
+    get:
+      tags:
+        - users
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+    delete:
+      tags:
+        - users
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: User deleted
+  /items/{item_id}:
+    get:
+      tags:
+        - items
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+components:
+  schemas:
+    UserCreate:
+      type: object
+      required:
+        - name
+        - email
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        age:
+          type: integer
+    UserResponse:
+      type: object
+      required:
+        - id
+        - name
+        - email
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        age:
+          type: integer
+        is_active:
+          type: boolean
+    ItemResponse:
+      type: object
+      required:
+        - id
+        - title
+        - price
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        price:
+          type: number
+        description:
+          type: string

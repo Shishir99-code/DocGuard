@@ -1,0 +1,69 @@
+name: "DocGuard Drift Check"
+description: "Eliminate API documentation drift. Validate your code against your OpenAPI spec on every pull request."
+author: "DocGuard"
+
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  spec:
+    description: "Path to the OpenAPI spec file (YAML or JSON)"
+    required: false
+    default: "openapi.yaml"
+  source:
+    description: "Source directory to scan for API code"
+    required: false
+    default: "."
+  framework:
+    description: "Force a specific framework parser (auto, fastapi)"
+    required: false
+    default: "auto"
+  fail-on:
+    description: "When to fail the check: any, drift-only, missing"
+    required: false
+    default: "any"
+  python-version:
+    description: "Python version to use"
+    required: false
+    default: "3.11"
+
+outputs:
+  drift-score:
+    description: "The drift score (0.0 = synced, 1.0 = fully drifted)"
+  report:
+    description: "Path to the generated JSON drift report"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install DocGuard
+      shell: bash
+      run: pip install docguard
+
+    - name: Run DocGuard check
+      shell: bash
+      id: check
+      run: |
+        docguard report \
+          --spec "${{ inputs.spec }}" \
+          --source "${{ inputs.source }}" \
+          --framework "${{ inputs.framework }}" \
+          --output "${{ runner.temp }}/docguard-report.json"
+
+        echo "report=${{ runner.temp }}/docguard-report.json" >> "$GITHUB_OUTPUT"
+
+        SCORE=$(python -c "import json; print(json.load(open('${{ runner.temp }}/docguard-report.json'))['drift_score'])")
+        echo "drift-score=$SCORE" >> "$GITHUB_OUTPUT"
+
+        docguard check \
+          --spec "${{ inputs.spec }}" \
+          --source "${{ inputs.source }}" \
+          --framework "${{ inputs.framework }}" \
+          --fail-on "${{ inputs.fail-on }}" \
+          --format github

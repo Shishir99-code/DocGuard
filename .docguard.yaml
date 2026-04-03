@@ -1,0 +1,22 @@
+# DocGuard configuration
+# https://docs.docguard.dev/configuration
+
+spec: openapi.yaml
+source: "."
+framework: auto
+
+ignore:
+  - "*/tests/*"
+  - "*/migrations/*"
+
+check:
+  fail_on: any               # any | drift-only | missing
+  severity_threshold: error   # error | warning | info
+
+fix:
+  model: gpt-4o-mini
+  api_key_env: OPENAI_API_KEY
+
+output:
+  format: text                # text | json | github
+  # report_path: null         # Uncomment to write JSON report to a file

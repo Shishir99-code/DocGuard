@@ -1,0 +1,139 @@
+openapi: "3.1.0"
+info:
+  title: Drifted API
+  version: "1.0.0"
+  description: >
+    This spec is intentionally drifted from the sample app:
+    - /users GET response has 'age' as string instead of integer
+    - /users/{user_id} GET is missing from the spec entirely
+    - /health endpoint exists in spec but not in code
+paths:
+  /users:
+    get:
+      summary: List all users
+      tags:
+        - users
+      parameters:
+        - name: skip
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserResponseDrifted"
+    post:
+      summary: Create user
+      tags:
+        - users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponseDrifted"
+  /users/{user_id}:
+    delete:
+      tags:
+        - users
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: User deleted
+  /items/{item_id}:
+    get:
+      tags:
+        - items
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+components:
+  schemas:
+    UserCreate:
+      type: object
+      required:
+        - name
+        - email
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        age:
+          type: integer
+    UserResponseDrifted:
+      type: object
+      required:
+        - id
+        - name
+        - email
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        age:
+          type: string
+        is_active:
+          type: boolean
+    ItemResponse:
+      type: object
+      required:
+        - id
+        - title
+        - price
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        price:
+          type: number
+        description:
+          type: string

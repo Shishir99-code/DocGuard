@@ -1,0 +1,73 @@
+site_name: DocGuard
+site_url: https://docs.docguard.dev
+site_description: Eliminate API documentation drift. Your OpenAPI spec becomes a test case.
+repo_url: https://github.com/docguard/docguard
+repo_name: docguard/docguard
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+    - content.code.annotate
+    - search.highlight
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - CLI Reference: cli-reference.md
+  - Configuration: configuration.md
+  - Drift Report Schema: drift-report-schema.md
+  - Integrations:
+      - GitHub Actions: integrations/github-actions.md
+      - Pre-commit Hooks: integrations/pre-commit.md
+  - Auto-Fix (LLM): auto-fix.md
+  - Architecture: architecture.md
+  - Extending:
+      - Writing a Parser: extending/writing-a-parser.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/docguard/docguard

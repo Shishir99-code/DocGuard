@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "docguard"
+version = "0.1.0"
+description = "Eliminate API documentation drift. Your OpenAPI spec becomes a test case."
+readme = "README.md"
+license = "BUSL-1.1"
+requires-python = ">=3.11"
+authors = [
+    { name = "DocGuard", email = "hello@docguard.dev" },
+]
+keywords = ["openapi", "swagger", "documentation", "drift", "linter", "ci", "fastapi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Documentation",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+    "pydantic>=2.0",
+    "openapi-spec-validator>=0.7",
+]
+
+[project.optional-dependencies]
+llm = [
+    "openai>=1.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocs-social>=1.0",
+]
+
+[project.urls]
+Homepage = "https://docguard.dev"
+Documentation = "https://docs.docguard.dev"
+Repository = "https://github.com/docguard/docguard"
+Issues = "https://github.com/docguard/docguard/issues"
+Changelog = "https://github.com/docguard/docguard/blob/main/CHANGELOG.md"
+
+[project.scripts]
+docguard = "docguard.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docguard"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
