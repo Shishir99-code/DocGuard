@@ -21,7 +21,9 @@ DocGuard turns your spec from a **passive artifact** into an **active guardrail*
 ## Get Started
 
 ```bash
-pip install docguard
+git clone https://github.com/Shishir99-code/DocGuard.git
+cd DocGuard
+pip install -e .
 docguard init
 docguard check
 ```

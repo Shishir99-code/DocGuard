@@ -16,8 +16,8 @@ Add the following to your `.pre-commit-config.yaml`:
 
 ```yaml
 repos:
-  - repo: https://github.com/docguard/docguard
-    rev: v0.1.0
+  - repo: https://github.com/Shishir99-code/DocGuard
+    rev: main
     hooks:
       - id: docguard-check
         args: [--spec, openapi.yaml]
@@ -37,8 +37,8 @@ Pass any `docguard check` flags via `args`:
 
 ```yaml
 repos:
-  - repo: https://github.com/docguard/docguard
-    rev: v0.1.0
+  - repo: https://github.com/Shishir99-code/DocGuard
+    rev: main
     hooks:
       - id: docguard-check
         args:

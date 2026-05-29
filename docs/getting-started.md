@@ -10,14 +10,18 @@ This guide takes you from zero to a passing `docguard check` in under five minut
 
 ## Installation
 
+Clone the repository and install it in editable mode:
+
 ```bash
-pip install docguard
+git clone https://github.com/Shishir99-code/DocGuard.git
+cd DocGuard
+pip install -e .
 ```
 
 To also enable LLM-powered auto-fix:
 
 ```bash
-pip install 'docguard[llm]'
+pip install -e '.[llm]'
 ```
 
 ## Step 1: Initialize

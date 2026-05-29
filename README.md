@@ -2,10 +2,8 @@
 
 **Your API spec is a lie. DocGuard fixes that.**
 
-[![PyPI version](https://img.shields.io/pypi/v/docguard.svg)](https://pypi.org/project/docguard/)
 [![License: BUSL-1.1](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/github/actions/workflow/status/docguard/docguard/ci.yml?label=tests)](https://github.com/docguard/docguard/actions)
 
 ---
 
@@ -22,8 +20,12 @@ DocGuard turns your spec into an **active test case** instead of a passive artif
 
 ## Quick Start
 
+Clone the repository and install locally:
+
 ```bash
-pip install docguard
+git clone https://github.com/Shishir99-code/DocGuard.git
+cd DocGuard
+pip install -e .
 ```
 
 Initialize a config in your project:
@@ -69,6 +71,8 @@ OpenAPI Spec ──► Spec Loader ──► Canonical Model ──────�
 
 ### GitHub Actions
 
+Install DocGuard from the repository and run it in your workflow:
+
 ```yaml
 # .github/workflows/docguard.yml
 name: DocGuard
@@ -78,10 +82,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docguard/action@v1
+      - uses: actions/setup-python@v5
         with:
-          spec: openapi.yaml
-          fail-on: any
+          python-version: "3.11"
+      - run: pip install git+https://github.com/Shishir99-code/DocGuard.git
+      - run: docguard check --spec openapi.yaml --format github --fail-on any
 ```
 
 ### Pre-commit Hook
@@ -89,8 +94,8 @@ jobs:
 ```yaml
 # .pre-commit-config.yaml
 repos:
-  - repo: https://github.com/docguard/docguard
-    rev: v0.1.0
+  - repo: https://github.com/Shishir99-code/DocGuard
+    rev: main
     hooks:
       - id: docguard-check
         args: [--spec, openapi.yaml]
@@ -105,7 +110,11 @@ docguard fix --spec openapi.yaml          # Dry-run: prints suggested changes
 docguard fix --spec openapi.yaml --apply  # Writes fixes directly
 ```
 
-Requires an OpenAI API key. Install with `pip install 'docguard[llm]'`.
+Requires an OpenAI API key. Install the LLM extra with:
+
+```bash
+pip install -e '.[llm]'
+```
 
 ## CLI Reference
 
@@ -137,18 +146,14 @@ output:
 
 See the [configuration reference](https://docs.docguard.dev/configuration) for all options.
 
-## Pricing
-
-DocGuard is free for open-source projects. For private repositories, see our [per-repo pricing](https://docguard.dev/pricing).
-
 ## Documentation
 
-- [Getting Started](https://docs.docguard.dev/getting-started)
-- [CLI Reference](https://docs.docguard.dev/cli-reference)
-- [Configuration](https://docs.docguard.dev/configuration)
-- [GitHub Actions Integration](https://docs.docguard.dev/integrations/github-actions)
-- [Architecture](https://docs.docguard.dev/architecture)
-- [Writing a Custom Parser](https://docs.docguard.dev/extending/writing-a-parser)
+- [Getting Started](docs/getting-started.md)
+- [CLI Reference](docs/cli-reference.md)
+- [Configuration](docs/configuration.md)
+- [GitHub Actions Integration](docs/integrations/github-actions.md)
+- [Architecture](docs/architecture.md)
+- [Writing a Custom Parser](docs/extending/writing-a-parser.md)
 
 ## Contributing
 

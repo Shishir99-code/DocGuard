@@ -12,7 +12,7 @@ Thank you for your interest in contributing to DocGuard! This document covers ev
 ### Clone and Install
 
 ```bash
-git clone https://github.com/docguard/docguard.git
+git clone https://github.com/Shishir99-code/DocGuard.git
 cd docguard
 pip install -e ".[dev]"
 ```

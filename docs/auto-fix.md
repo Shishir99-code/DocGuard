@@ -19,7 +19,7 @@ Drift Report + Current Spec ──► LLM Prompt ──► OpenAI API ──► 
 The LLM feature requires the `openai` package:
 
 ```bash
-pip install 'docguard[llm]'
+pip install -e '.[llm]'
 ```
 
 ## API Key Setup

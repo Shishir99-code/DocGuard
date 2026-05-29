@@ -157,6 +157,5 @@ docguard version
 | Variable | Description | Used by |
 |----------|-------------|---------|
 | `OPENAI_API_KEY` | API key for LLM-powered auto-fix (default) | `docguard fix` |
-| `DOCGUARD_SPEC_PATH` | Override spec path (alternative to `--spec`) | All commands |
 
 The API key environment variable name is configurable via `.docguard.yaml` under `fix.api_key_env`.

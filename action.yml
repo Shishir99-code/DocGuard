@@ -44,7 +44,7 @@ runs:
 
     - name: Install DocGuard
       shell: bash
-      run: pip install docguard
+      run: pip install git+https://github.com/Shishir99-code/DocGuard.git
 
     - name: Run DocGuard check
       shell: bash

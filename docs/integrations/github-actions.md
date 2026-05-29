@@ -1,6 +1,6 @@
 # GitHub Actions Integration
 
-DocGuard provides a GitHub Action that validates your code against your OpenAPI spec on every pull request. Drift issues appear as inline annotations on the "Files changed" tab.
+DocGuard can run on every pull request to catch drift before it merges. Drift issues appear as inline annotations on the "Files changed" tab when using `--format github`.
 
 ## Quick Setup
 
@@ -16,15 +16,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docguard/action@v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install git+https://github.com/Shishir99-code/DocGuard.git
+      - run: docguard check --spec openapi.yaml --format github --fail-on any
+```
+
+The `--format github` flag outputs `::error` and `::warning` workflow commands, which GitHub renders as inline annotations on the pull request.
+
+## Using the Composite Action
+
+If your project clones or embeds this repository, you can reference the bundled `action.yml` directly:
+
+```yaml
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Shishir99-code/DocGuard@main
         with:
           spec: openapi.yaml
           fail-on: any
 ```
 
-That's it. The action installs DocGuard, runs the check, and posts inline annotations for any drift detected.
-
-## Action Inputs
+### Action Inputs
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
@@ -34,7 +51,7 @@ That's it. The action installs DocGuard, runs the check, and posts inline annota
 | `fail-on` | No | `any` | Failure threshold: `any`, `drift-only`, `missing` |
 | `python-version` | No | `3.11` | Python version to use |
 
-## Action Outputs
+### Action Outputs
 
 | Output | Description |
 |--------|-------------|
@@ -43,18 +60,23 @@ That's it. The action installs DocGuard, runs the check, and posts inline annota
 
 ## Using Outputs
 
-You can use the action outputs in subsequent steps:
-
 ```yaml
 jobs:
   drift-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docguard/action@v1
-        id: docguard
+      - uses: actions/setup-python@v5
         with:
-          spec: openapi.yaml
+          python-version: "3.11"
+      - run: pip install git+https://github.com/Shishir99-code/DocGuard.git
+      - id: check
+        run: |
+          docguard report --output "$RUNNER_TEMP/docguard-report.json"
+          echo "report=$RUNNER_TEMP/docguard-report.json" >> "$GITHUB_OUTPUT"
+          SCORE=$(python -c "import json; print(json.load(open('$RUNNER_TEMP/docguard-report.json'))['drift_score'])")
+          echo "drift-score=$SCORE" >> "$GITHUB_OUTPUT"
+          docguard check --format github --fail-on any
 
       - name: Comment on PR
         if: failure()
@@ -65,31 +87,9 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `DocGuard detected API drift (score: ${{ steps.docguard.outputs.drift-score }}). Please update the OpenAPI spec.`
+              body: `DocGuard detected API drift (score: ${{ steps.check.outputs.drift-score }}). Please update the OpenAPI spec.`
             })
 ```
-
-## Manual Setup (Without the Action)
-
-If you prefer not to use the composite action, install DocGuard directly:
-
-```yaml
-name: DocGuard
-on: [pull_request]
-
-jobs:
-  drift-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install docguard
-      - run: docguard check --spec openapi.yaml --format github --fail-on any
-```
-
-The `--format github` flag outputs `::error` and `::warning` workflow commands, which GitHub renders as inline annotations on the pull request.
 
 ## Caching
 
@@ -102,7 +102,7 @@ steps:
     with:
       python-version: "3.11"
       cache: pip
-  - run: pip install docguard
+  - run: pip install git+https://github.com/Shishir99-code/DocGuard.git
   - run: docguard check --format github
 ```
 
@@ -116,7 +116,7 @@ steps:
   - uses: actions/setup-python@v5
     with:
       python-version: "3.11"
-  - run: pip install docguard
+  - run: pip install git+https://github.com/Shishir99-code/DocGuard.git
   - run: docguard report --output drift-report.json
   - uses: actions/upload-artifact@v4
     with:
