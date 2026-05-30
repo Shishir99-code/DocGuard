@@ -185,12 +185,15 @@ def _schema_to_fields(
 
     for name, prop in properties.items():
         prop = _resolve_ref(prop, components_schemas, _visited)
-        prop_type = _OPENAPI_TYPE_MAP.get(prop.get("type", "object"), "object")
+        # OAS 3.1: nullable fields use anyOf: [{type: X}, {type: null}] with no
+        # top-level "type" key. Unwrap to the non-null variant before mapping.
+        resolved_prop = _unwrap_anyof_nullable(prop, components_schemas, _visited)
+        prop_type = _OPENAPI_TYPE_MAP.get(resolved_prop.get("type", "object"), "object")
         nested = None
-        if prop.get("type") == "object" or "$ref" in prop or "properties" in prop:
-            nested = _schema_to_fields(prop, components_schemas, _visited)
-        elif prop.get("type") == "array":
-            items = prop.get("items", {})
+        if resolved_prop.get("type") == "object" or "$ref" in resolved_prop or "properties" in resolved_prop:
+            nested = _schema_to_fields(resolved_prop, components_schemas, _visited)
+        elif resolved_prop.get("type") == "array":
+            items = resolved_prop.get("items", {})
             nested = _schema_to_fields(items, components_schemas, _visited)
 
         fields.append(InferredField(
@@ -202,6 +205,22 @@ def _schema_to_fields(
         ))
 
     return fields
+
+
+def _unwrap_anyof_nullable(
+    prop: dict, components_schemas: dict, visited: set[str]
+) -> dict:
+    """If *prop* is an OAS 3.1 anyOf nullable (e.g. anyOf: [{type: X}, {type: null}]),
+    return the non-null variant so type resolution works correctly."""
+    if "type" in prop or "$ref" in prop:
+        return prop
+    any_of = prop.get("anyOf") or prop.get("oneOf")
+    if not any_of:
+        return prop
+    non_null = [v for v in any_of if v.get("type") != "null" and v != {"type": "null"}]
+    if len(non_null) == 1:
+        return _resolve_ref(non_null[0], components_schemas, visited)
+    return prop
 
 
 def _resolve_ref(schema: dict, components_schemas: dict, visited: set[str]) -> dict:

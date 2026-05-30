@@ -65,7 +65,12 @@ class _PydanticModelCollector(ast.NodeVisitor):
                     required, default = self._parse_field_call(item.value, is_optional)
 
                 nested = self.models.get(field_type) if field_type not in _PYTHON_TYPE_TO_JSON else None
-                json_type = _PYTHON_TYPE_TO_JSON.get(field_type, "object")
+                # _resolve_annotation may return a JSON type directly (e.g.
+                # "array" for list[X]) — pass those through as-is.
+                json_type = _PYTHON_TYPE_TO_JSON.get(
+                    field_type,
+                    field_type if field_type in ("array", "object", "string", "integer", "number", "boolean") else "object",
+                )
 
                 fields.append(InferredField(
                     name=field_name,
@@ -132,6 +137,9 @@ class _PydanticModelCollector(ast.NodeVisitor):
             if kw.arg == "default" and isinstance(kw.value, ast.Constant):
                 default = str(kw.value.value)
                 required = False
+            elif kw.arg == "default_factory":
+                # Any default_factory makes the field non-required
+                required = False
         if node.args:
             if isinstance(node.args[0], ast.Constant) and node.args[0].value is not ...:
                 default = str(node.args[0].value)
@@ -163,6 +171,9 @@ class _RouteVisitor(ast.NodeVisitor):
             method, path, status_code, tags, summary = route_info
             path_params, query_params, body_fields = self._parse_function_params(node, path)
             response_fields = self._extract_response_model(decorator)
+            # Fall back to the function's return-type annotation (FastAPI 0.90+ feature)
+            if response_fields is None:
+                response_fields = self._extract_return_annotation_fields(node)
 
             self.endpoints.append(InferredEndpoint(
                 path=path,
@@ -262,6 +273,36 @@ class _RouteVisitor(ast.NodeVisitor):
                     inner_name = _resolve_name(kw.value.slice)
                     if inner_name and inner_name in self.models:
                         return list(self.models[inner_name])
+        return None
+
+    def _extract_return_annotation_fields(
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef
+    ) -> list[InferredField] | None:
+        """Resolve `-> Model` / `-> list[Model]` return annotations to response fields."""
+        if node.returns is None:
+            return None
+        return self._annotation_to_fields(node.returns)
+
+    def _annotation_to_fields(self, annotation: ast.expr) -> list[InferredField] | None:
+        if isinstance(annotation, ast.Subscript):
+            outer = _resolve_name(annotation.value)
+            # list[Model] / List[Model] — unwrap to inner type
+            if outer in ("list", "List"):
+                return self._annotation_to_fields(annotation.slice)
+            # Optional[Model] / Union[Model, None] — unwrap to inner type
+            if outer in ("Optional",):
+                return self._annotation_to_fields(annotation.slice)
+        # X | Y  (PEP 604) — take the non-None side
+        if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
+            left_name = _resolve_name(annotation.left)
+            right_name = _resolve_name(annotation.right)
+            if right_name == "None":
+                return self._annotation_to_fields(annotation.left)
+            if left_name == "None":
+                return self._annotation_to_fields(annotation.right)
+        name = _resolve_name(annotation)
+        if name and name in self.models:
+            return list(self.models[name])
         return None
 
 
