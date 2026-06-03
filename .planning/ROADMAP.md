@@ -23,10 +23,13 @@ Four phases fix every known correctness issue in DocGuard v0.1.0. Phase 1 makes 
   2. Running `docguard check` when source files exist but zero endpoints are detected exits with a non-zero code and a human-readable warning explaining the likely configuration issue
   3. Setting `severity_threshold: warning` in `.docguard.yaml` causes items below the threshold to be shown but not affect the exit code — the exit code is 0 when only sub-threshold items exist
   4. JSON output (`--format json`) includes a `source_warnings` field listing any files that were skipped due to parse errors
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — DIAG-01: surface parse failures (parser source_warnings + stderr warning + DriftReportMetadata field)
+- [ ] 01-02-PLAN.md — DIAG-02/03 + determinism: zero-endpoints guard, severity_threshold exit filter, sorted() + source_warnings CLI wiring
 
 ### Phase 2: Spec Comparison Correctness
-**Goal:** DocGuard stops producing false drift for $ref parameters and Union-typed fields — parameters defined in components are resolved, and Union[A, B] fields no longer collapse to the wrong type
+**Goal:** DocGuard stops producing false drift for $ref parameters and Union types — parameters defined in components are resolved, and Union[A, B] fields no longer collapse to the wrong type
 **Mode:** mvp
 **Depends on:** Phase 1
 **Requirements:** SPEC-01, TYPE-01
@@ -63,7 +66,7 @@ Four phases fix every known correctness issue in DocGuard v0.1.0. Phase 1 makes 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Diagnostics & Threshold | 0/TBD | Not started | - |
+| 1. Diagnostics & Threshold | 0/2 | Not started | - |
 | 2. Spec Comparison Correctness | 0/TBD | Not started | - |
 | 3. Router Detection | 0/TBD | Not started | - |
 | 4. include_router Prefix Support | 0/TBD | Not started | - |
