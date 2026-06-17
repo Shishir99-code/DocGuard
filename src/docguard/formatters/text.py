@@ -31,8 +31,12 @@ def render(report: DriftReport, console: Console | None = None) -> None:
     summary_table.add_row("Endpoints in spec", str(s.total_endpoints_in_spec))
     summary_table.add_row("Synced", f"[green]{s.synced}[/green]")
     summary_table.add_row("Drifted", f"[red]{s.drifted}[/red]" if s.drifted else "0")
-    summary_table.add_row("Missing in spec", f"[red]{s.missing_in_spec}[/red]" if s.missing_in_spec else "0")
-    summary_table.add_row("Missing in code", f"[yellow]{s.missing_in_code}[/yellow]" if s.missing_in_code else "0")
+    summary_table.add_row(
+        "Missing in spec", f"[red]{s.missing_in_spec}[/red]" if s.missing_in_spec else "0"
+    )
+    summary_table.add_row(
+        "Missing in code", f"[yellow]{s.missing_in_code}[/yellow]" if s.missing_in_code else "0"
+    )
     console.print(summary_table)
 
     # Endpoint details (only non-synced)
@@ -48,7 +52,10 @@ def render(report: DriftReport, console: Console | None = None) -> None:
 
         header = f"{ep.method} {ep.path}  {status_style}"
         if ep.source_location:
-            header += f"  [dim]{ep.source_location.get('file', '')}:{ep.source_location.get('line', '')}[/dim]"
+            header += (
+                f"  [dim]{ep.source_location.get('file', '')}:"
+                f"{ep.source_location.get('line', '')}[/dim]"
+            )
 
         console.print(f"\n  {header}")
 
@@ -63,4 +70,7 @@ def render(report: DriftReport, console: Console | None = None) -> None:
     if report.drift_score == 0:
         console.print("\n[bold green]All endpoints are in sync.[/bold green]")
     else:
-        console.print(f"\n[bold red]{s.drifted + s.missing_in_spec + s.missing_in_code} issue(s) found.[/bold red]")
+        console.print(
+            f"\n[bold red]{s.drifted + s.missing_in_spec + s.missing_in_code} "
+            "issue(s) found.[/bold red]"
+        )

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from docguard.parsers.base import FrameworkParser
 from docguard.parsers.fastapi_parser import FastAPIParser
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from docguard.parsers.base import FrameworkParser
 
 _PARSERS: list[FrameworkParser] = [
     FastAPIParser(),

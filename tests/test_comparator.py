@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from docguard.core.comparator import compare
 from docguard.core.models import EndpointStatus
 from docguard.core.spec_loader import load_spec, normalize_spec
 from docguard.parsers.fastapi_parser import FastAPIParser
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TestComparatorSynced:

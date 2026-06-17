@@ -42,6 +42,7 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "pre-commit>=3.7",
+    "types-PyYAML>=6.0",
 ]
 docs = [
     "mkdocs-material>=9.5",
@@ -68,12 +69,26 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH"]
+# UP042: DocGuard intentionally uses `str, enum.Enum` (not StrEnum) for JSON-serializable
+# enums — a documented convention (see CLAUDE.md "Data Models"). Keep the pattern.
+ignore = ["UP042"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer's CLI pattern requires Option()/Argument() as parameter defaults; this is the
+# ruff-recommended way to allow it without disabling B008 elsewhere.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+# openai is an optional ("llm" extra) dependency and ships no type stubs; it is
+# lazy-imported only by the `fix` command, never in the core check/report path.
+[[tool.mypy.overrides]]
+module = "openai"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

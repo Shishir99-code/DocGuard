@@ -1,7 +1,7 @@
 """Sample FastAPI application used as a test fixture for the parser."""
 
-from fastapi import FastAPI, Query
-from pydantic import BaseModel, Field
+from fastapi import FastAPI
+from pydantic import BaseModel
 
 app = FastAPI()
 

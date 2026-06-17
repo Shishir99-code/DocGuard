@@ -23,7 +23,8 @@ def render(report: DriftReport) -> str:
         if ep.status == EndpointStatus.MISSING_IN_SPEC:
             lines.append(
                 f"::error file={file},line={line}::"
-                f"Endpoint {ep.method} {ep.path} exists in code but is missing from the OpenAPI spec."
+                f"Endpoint {ep.method} {ep.path} exists in code "
+                "but is missing from the OpenAPI spec."
             )
             continue
 

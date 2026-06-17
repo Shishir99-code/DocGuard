@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class CheckConfig(BaseModel):
@@ -50,7 +53,9 @@ def find_config(project_root: Path) -> Path | None:
     return None
 
 
-def load_config(config_path: Path | None = None, project_root: Path | None = None) -> DocGuardConfig:
+def load_config(
+    config_path: Path | None = None, project_root: Path | None = None
+) -> DocGuardConfig:
     """Load configuration from a file, or return defaults."""
     if config_path is None and project_root is not None:
         config_path = find_config(project_root)

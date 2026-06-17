@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from docguard.core.models import InferredEndpoint, InferredField
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _PYTHON_TYPE_TO_JSON: dict[str, str] = {
     "str": "string",
@@ -61,15 +64,20 @@ class _PydanticModelCollector(ast.NodeVisitor):
                 if item.value is not None and not self._is_field_call(item.value):
                     default = _const_to_str(item.value)
                     required = False
-                if self._is_field_call(item.value):
+                if item.value is not None and self._is_field_call(item.value):
                     required, default = self._parse_field_call(item.value, is_optional)
 
-                nested = self.models.get(field_type) if field_type not in _PYTHON_TYPE_TO_JSON else None
+                nested = (
+                    self.models.get(field_type)
+                    if field_type not in _PYTHON_TYPE_TO_JSON
+                    else None
+                )
                 # _resolve_annotation may return a JSON type directly (e.g.
                 # "array" for list[X]) — pass those through as-is.
+                json_types = ("array", "object", "string", "integer", "number", "boolean")
                 json_type = _PYTHON_TYPE_TO_JSON.get(
                     field_type,
-                    field_type if field_type in ("array", "object", "string", "integer", "number", "boolean") else "object",
+                    field_type if field_type in json_types else "object",
                 )
 
                 fields.append(InferredField(
@@ -140,10 +148,13 @@ class _PydanticModelCollector(ast.NodeVisitor):
             elif kw.arg == "default_factory":
                 # Any default_factory makes the field non-required
                 required = False
-        if node.args:
-            if isinstance(node.args[0], ast.Constant) and node.args[0].value is not ...:
-                default = str(node.args[0].value)
-                required = False
+        if (
+            node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value is not ...
+        ):
+            default = str(node.args[0].value)
+            required = False
         return required, default
 
 
@@ -170,7 +181,11 @@ class _RouteVisitor(ast.NodeVisitor):
                 continue
             method, path, status_code, tags, summary = route_info
             path_params, query_params, body_fields = self._parse_function_params(node, path)
-            response_fields = self._extract_response_model(decorator)
+            response_fields = (
+                self._extract_response_model(decorator)
+                if isinstance(decorator, ast.Call)
+                else None
+            )
             # Fall back to the function's return-type annotation (FastAPI 0.90+ feature)
             if response_fields is None:
                 response_fields = self._extract_return_annotation_fields(node)
@@ -189,7 +204,9 @@ class _RouteVisitor(ast.NodeVisitor):
                 source_line=node.lineno,
             ))
 
-    def _parse_route_decorator(self, node: ast.expr) -> tuple[str, str, int, list[str], str | None] | None:
+    def _parse_route_decorator(
+        self, node: ast.expr
+    ) -> tuple[str, str, int, list[str], str | None] | None:
         """Try to parse @app.get("/path", ...) or @router.post("/path", ...)."""
         if not isinstance(node, ast.Call):
             return None
@@ -213,7 +230,11 @@ class _RouteVisitor(ast.NodeVisitor):
         summary: str | None = None
 
         for kw in node.keywords:
-            if kw.arg == "status_code" and isinstance(kw.value, ast.Constant):
+            if (
+                kw.arg == "status_code"
+                and isinstance(kw.value, ast.Constant)
+                and isinstance(kw.value.value, (int, str))
+            ):
                 status_code = int(kw.value.value)
             elif kw.arg == "tags" and isinstance(kw.value, (ast.List, ast.Tuple)):
                 tags = [str(e.value) for e in kw.value.elts if isinstance(e, ast.Constant)]
@@ -258,7 +279,9 @@ class _RouteVisitor(ast.NodeVisitor):
                 path_params.append(InferredField(name=name, type=json_type, required=True))
             else:
                 has_default = _arg_has_default(node, arg)
-                query_params.append(InferredField(name=name, type=json_type, required=not has_default))
+                query_params.append(
+                    InferredField(name=name, type=json_type, required=not has_default)
+                )
 
         return path_params, query_params, body_fields
 

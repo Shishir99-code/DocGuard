@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from docguard.core.models import InferredEndpoint, InferredField
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _OPENAPI_TYPE_MAP: dict[str, str] = {
     "string": "string",
@@ -19,12 +22,14 @@ _OPENAPI_TYPE_MAP: dict[str, str] = {
 }
 
 
-def load_spec(spec_path: Path) -> dict:
+def load_spec(spec_path: Path) -> dict[str, Any]:
     """Read an OpenAPI spec from YAML or JSON and return the raw dict."""
     content = spec_path.read_text(encoding="utf-8")
     if spec_path.suffix in (".yaml", ".yml"):
-        return yaml.safe_load(content)
-    return json.loads(content)
+        data: dict[str, Any] = yaml.safe_load(content)
+    else:
+        data = json.loads(content)
+    return data
 
 
 def find_spec(project_root: Path) -> Path | None:
@@ -47,11 +52,11 @@ def find_spec(project_root: Path) -> Path | None:
     return None
 
 
-def normalize_spec(spec: dict) -> list[InferredEndpoint]:
+def normalize_spec(spec: dict[str, Any]) -> list[InferredEndpoint]:
     """Convert a raw OpenAPI spec dict into a list of ``InferredEndpoint``."""
     endpoints: list[InferredEndpoint] = []
-    paths: dict = spec.get("paths", {})
-    components_schemas: dict = spec.get("components", {}).get("schemas", {})
+    paths: dict[str, Any] = spec.get("paths", {})
+    components_schemas: dict[str, Any] = spec.get("components", {}).get("schemas", {})
 
     for path, methods in paths.items():
         if not isinstance(methods, dict):
@@ -89,7 +94,7 @@ def normalize_spec(spec: dict) -> list[InferredEndpoint]:
     return endpoints
 
 
-def _infer_success_status(operation: dict) -> int:
+def _infer_success_status(operation: dict[str, Any]) -> int:
     """Pick the primary success status code from the responses block."""
     responses = operation.get("responses", {})
     for code in ("200", "201", "202", "204"):
@@ -107,7 +112,7 @@ def _infer_success_status(operation: dict) -> int:
 
 
 def _extract_parameters(
-    op_params: list[dict], path_params_shared: list[dict]
+    op_params: list[dict[str, Any]], path_params_shared: list[dict[str, Any]]
 ) -> tuple[list[InferredField], list[InferredField]]:
     """Extract path and query parameters from the combined parameter list."""
     all_params = list(path_params_shared) + list(op_params)
@@ -133,7 +138,7 @@ def _extract_parameters(
 
 
 def _extract_request_body(
-    operation: dict, components_schemas: dict
+    operation: dict[str, Any], components_schemas: dict[str, Any]
 ) -> list[InferredField] | None:
     """Extract request body fields from the operation."""
     body = operation.get("requestBody", {})
@@ -146,7 +151,7 @@ def _extract_request_body(
 
 
 def _extract_response_fields(
-    operation: dict, status_code: int, components_schemas: dict
+    operation: dict[str, Any], status_code: int, components_schemas: dict[str, Any]
 ) -> list[InferredField] | None:
     """Extract response body fields for the given status code."""
     responses = operation.get("responses", {})
@@ -160,7 +165,7 @@ def _extract_response_fields(
 
 
 def _schema_to_fields(
-    schema: dict, components_schemas: dict, _visited: set[str] | None = None
+    schema: dict[str, Any], components_schemas: dict[str, Any], _visited: set[str] | None = None
 ) -> list[InferredField] | None:
     """Recursively convert an OpenAPI schema into a list of ``InferredField``."""
     if _visited is None:
@@ -190,7 +195,11 @@ def _schema_to_fields(
         resolved_prop = _unwrap_anyof_nullable(prop, components_schemas, _visited)
         prop_type = _OPENAPI_TYPE_MAP.get(resolved_prop.get("type", "object"), "object")
         nested = None
-        if resolved_prop.get("type") == "object" or "$ref" in resolved_prop or "properties" in resolved_prop:
+        if (
+            resolved_prop.get("type") == "object"
+            or "$ref" in resolved_prop
+            or "properties" in resolved_prop
+        ):
             nested = _schema_to_fields(resolved_prop, components_schemas, _visited)
         elif resolved_prop.get("type") == "array":
             items = resolved_prop.get("items", {})
@@ -208,8 +217,8 @@ def _schema_to_fields(
 
 
 def _unwrap_anyof_nullable(
-    prop: dict, components_schemas: dict, visited: set[str]
-) -> dict:
+    prop: dict[str, Any], components_schemas: dict[str, Any], visited: set[str]
+) -> dict[str, Any]:
     """If *prop* is an OAS 3.1 anyOf nullable (e.g. anyOf: [{type: X}, {type: null}]),
     return the non-null variant so type resolution works correctly."""
     if "type" in prop or "$ref" in prop:
@@ -223,7 +232,9 @@ def _unwrap_anyof_nullable(
     return prop
 
 
-def _resolve_ref(schema: dict, components_schemas: dict, visited: set[str]) -> dict:
+def _resolve_ref(
+    schema: dict[str, Any], components_schemas: dict[str, Any], visited: set[str]
+) -> dict[str, Any]:
     """Follow a ``$ref`` pointer to the actual schema definition."""
     ref = schema.get("$ref")
     if not ref:
@@ -239,5 +250,5 @@ def _resolve_ref(schema: dict, components_schemas: dict, visited: set[str]) -> d
         return {}
     visited.add(model_name)
 
-    resolved = components_schemas.get(model_name, {})
+    resolved: dict[str, Any] = components_schemas.get(model_name, {})
     return resolved
