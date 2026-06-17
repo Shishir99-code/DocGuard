@@ -106,6 +106,15 @@ the rest I can run for you once auth works.
    ```
    > Alternative: use an API key instead — `gh secret set ANTHROPIC_API_KEY` and swap the
    > `claude_code_oauth_token:` lines back to `anthropic_api_key:` in the three AI workflows.
+2b. **Install the Claude GitHub App on the repo** — REQUIRED, and separate from the token.
+   The OAuth token authenticates Claude to Anthropic; the GitHub App is what lets the
+   `claude-code-action` authenticate to GitHub (post reviews, push fixes). Without it the
+   AI workflows fail with `401 — Claude Code is not installed on this repository`.
+   ```bash
+   # In the Claude Code terminal:
+   /install-github-app
+   # …or visit https://github.com/apps/claude → Install → select this repo.
+   ```
 3. **(Optional) Projects v2 token.** Moving board cards from CI needs a PAT with `project`
    scope (the default `GITHUB_TOKEN` can't always edit user/org projects):
    ```bash
