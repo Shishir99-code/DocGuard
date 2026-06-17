@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git fetch:*)",
+      "Bash(git switch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh project item-list:*)",
+      "Bash(gh project item-create:*)",
+      "Bash(gh project item-edit:*)",
+      "Bash(gh label list:*)",
+      "Bash(bash scripts/pipeline/board.sh:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python3 -m pytest:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(pip install -e:*)"
+    ],
+    "ask": [
+      "Bash(gh pr merge:*)",
+      "Bash(git push --force:*)"
+    ]
+  }
+}

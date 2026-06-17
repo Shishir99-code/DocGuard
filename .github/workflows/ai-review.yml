@@ -1,0 +1,84 @@
+name: AI Review
+
+# Server-side autonomous reviewer. Runs on every PR update, applies DocGuard's
+# review rubric, posts inline + summary comments, and sets exactly one verdict
+# label: `ai-approved` or `ai-changes-requested`. The label drives ai-fix.yml
+# (fix loop) and auto-merge.yml (merge gate).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  # One review per PR; a new push cancels an in-flight review.
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Skip drafts. Only review pipeline PRs (label `ai-pipeline`) plus any human PR.
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are DocGuard's autonomous PR reviewer. DocGuard is a Python 3.11+
+            static analyzer that detects drift between an OpenAPI spec and FastAPI
+            source (AST-only, no live server). This milestone's goal: ZERO false
+            positives and ZERO silently missed endpoints on real FastAPI apps.
+
+            Review ONLY this PR's diff (`gh pr diff ${{ github.event.pull_request.number }}`).
+
+            Classify every finding:
+
+            BLOCKING (must fix before merge):
+            - Correctness bug, or a change that reintroduces a false positive or a
+              silently dropped endpoint.
+            - Guardrail violation: unjustified new runtime dependency; `.docguard.yaml`
+              backwards-incompatibility; LLM placed in the `check`/`report` path; parser
+              importing/exec-ing the analyzed project; broken layering (core/ importing
+              upward from parsers/formatters/fixers).
+            - Type-safety hole: removed annotation, unjustified `# type: ignore`,
+              `except: pass` hiding errors.
+            - A claimed behavior change that ships with no test covering it.
+            - Security: exec/eval of target code, unsafe YAML load, ReDoS-prone regex,
+              secret leakage, shell=True with untrusted input.
+
+            NON-BLOCKING (note, do not block): naming, docstrings, minor duplication,
+            perf nits, clearer messages.
+
+            Post inline comments on specific lines with
+            `mcp__github_inline_comment__create_inline_comment` (confirmed: true).
+            Post ONE top-level summary comment with `gh pr comment` listing blocking
+            vs non-blocking findings.
+
+            Then set the verdict label deterministically (remove the opposite first):
+            - If there are ZERO blocking findings:
+                gh pr edit ${{ github.event.pull_request.number }} --add-label "ai-approved" --remove-label "ai-changes-requested"
+            - If there is at least one blocking finding:
+                gh pr edit ${{ github.event.pull_request.number }} --add-label "ai-changes-requested" --remove-label "ai-approved"
+            Always also add the `ai-reviewed` label.
+
+            Do not approve/merge the PR yourself — labels are the only signal you set.
+            Keep your own false positives near zero: only flag what you are confident about.
+
+          claude_args: |
+            --model claude-opus-4-8
+            --max-turns 30
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr edit:*),Bash(gh label:*),Read,Grep,Glob,Bash(git diff:*),Bash(git log:*)"

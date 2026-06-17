@@ -1,0 +1,62 @@
+name: Auto Merge
+
+# The merge gate. When AI Review labels a PR `ai-approved`, enable GitHub native
+# auto-merge — which completes the merge ONLY once the required `quality-gate` CI
+# check passes. If a later review requests changes, auto-merge is disabled again.
+# Nothing red ever merges; main stays protected.
+
+on:
+  pull_request:
+    types: [labeled, unlabeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  arm-or-disarm:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Evaluate gate
+        id: gate
+        run: |
+          labels=$(gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name')
+          has() { echo "$labels" | grep -qx "$1"; }
+          if has "ai-approved" && ! has "ai-changes-requested" && ! has "blocked"; then
+            echo "decision=arm" >> "$GITHUB_OUTPUT"
+          else
+            echo "decision=disarm" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Enable auto-merge (merges when quality-gate passes)
+        if: steps.gate.outputs.decision == 'arm'
+        run: |
+          gh pr merge "$PR" --repo "$REPO" --squash --auto \
+            --subject "$(gh pr view "$PR" --repo "$REPO" --json title --jq .title) (#$PR)" \
+            || echo "auto-merge not enabled (check that 'Allow auto-merge' + branch protection are configured)"
+
+      - name: Disable auto-merge
+        if: steps.gate.outputs.decision == 'disarm'
+        run: gh pr merge "$PR" --repo "$REPO" --disable-auto || true
+
+  to-done:
+    # When the PR actually merges, move its board item to Done.
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      # Projects v2 writes need a PAT with `project` scope; GITHUB_TOKEN can't always edit org/user projects.
+      GH_TOKEN: ${{ secrets.PIPELINE_PROJECT_TOKEN }}
+      PR: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move board item to Done
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "PIPELINE_PROJECT_TOKEN not set; skipping board update."; exit 0
+          fi
+          bash scripts/pipeline/board.sh done-pr "$PR" || echo "board update skipped"

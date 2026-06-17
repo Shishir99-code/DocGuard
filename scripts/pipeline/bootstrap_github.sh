@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# bootstrap_github.sh — one-time, idempotent setup for the DocGuard autonomous pipeline.
+#
+# Creates: pipeline labels, the Projects v2 board ("DocGuard Autonomous Pipeline") with
+# a Status field (Backlog/Ready/In Progress/In Review/Done), repo merge settings,
+# branch protection on main (requires the `quality-gate` CI check), and seeds the backlog.
+# Writes resolved IDs to .github/pipeline.env (consumed by board.sh and the workflows).
+#
+# Requires: gh authenticated with scopes: repo, project (run `gh auth refresh -s project,read:project`).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ENV_FILE="$ROOT/.github/pipeline.env"
+PROJECT_TITLE="DocGuard Autonomous Pipeline"
+STAGES=("Backlog" "Ready" "In Progress" "In Review" "Done")
+
+note() { printf '\033[1;34m• %s\033[0m\n' "$*"; }
+ok()   { printf '\033[1;32m✓ %s\033[0m\n' "$*"; }
+warn() { printf '\033[1;33m! %s\033[0m\n' "$*" >&2; }
+
+# ── 0. Preflight ────────────────────────────────────────────────────────────
+note "Checking gh auth & scopes"
+gh auth status >/dev/null 2>&1 || { warn "Not authenticated. Run: gh auth login -h github.com"; exit 1; }
+if ! gh auth status 2>&1 | grep -qiE 'project'; then
+  warn "Token is missing the 'project' scope. Run: gh auth refresh -h github.com -s project,read:project,repo,workflow"
+  warn "Continuing — project-board steps may fail until the scope is added."
+fi
+
+REPO_JSON=$(gh repo view --json name,owner,nameWithOwner)
+OWNER=$(echo "$REPO_JSON" | jq -r '.owner.login')
+REPO_NWO=$(echo "$REPO_JSON" | jq -r '.nameWithOwner')
+ok "Repo: $REPO_NWO (owner: $OWNER)"
+
+# ── 1. Labels ───────────────────────────────────────────────────────────────
+note "Ensuring pipeline labels"
+ensure_label() { gh label create "$1" --color "$2" --description "$3" --force >/dev/null 2>&1 && ok "label $1" || warn "label $1 (exists or failed)"; }
+ensure_label "ai-pipeline"          "5319e7" "Created/driven by the autonomous pipeline"
+ensure_label "ai-reviewed"          "0e8a16" "AI reviewer has run on this PR"
+ensure_label "ai-approved"          "0e8a16" "AI reviewer found no blocking issues"
+ensure_label "ai-changes-requested" "d93f0b" "AI reviewer requested changes — triggers AI Fix"
+ensure_label "blocked"              "b60205" "Autonomous fix budget exhausted; needs a human"
+for n in 1 2 3; do ensure_label "ai-fix-attempt-$n" "ededed" "AI Fix attempt #$n"; done
+
+# ── 2. Project board ────────────────────────────────────────────────────────
+note "Ensuring Projects v2 board: $PROJECT_TITLE"
+PNUM=$(gh project list --owner "$OWNER" --format json --limit 100 2>/dev/null \
+        | jq -r --arg t "$PROJECT_TITLE" '.projects[] | select(.title==$t) | .number' | head -1 || true)
+if [[ -z "${PNUM:-}" ]]; then
+  PNUM=$(gh project create --owner "$OWNER" --title "$PROJECT_TITLE" --format json | jq -r '.number')
+  ok "Created project #$PNUM"
+else
+  ok "Project already exists: #$PNUM"
+fi
+PID=$(gh project view "$PNUM" --owner "$OWNER" --format json | jq -r '.id')
+
+# Status field + options
+FIELDS_JSON=$(gh project field-list "$PNUM" --owner "$OWNER" --format json --limit 50)
+SFID=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name=="Status") | .id' | head -1)
+if [[ -z "${SFID:-}" || "$SFID" == "null" ]]; then
+  warn "No 'Status' field found; creating one with our stages."
+  gh project field-create "$PNUM" --owner "$OWNER" --name "Status" \
+     --data-type SINGLE_SELECT --single-select-options "$(IFS=,; echo "${STAGES[*]}")" >/dev/null
+  FIELDS_JSON=$(gh project field-list "$PNUM" --owner "$OWNER" --format json --limit 50)
+  SFID=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name=="Status") | .id' | head -1)
+fi
+
+# Verify every stage has an option; if some are missing (built-in Status had Todo/Done/...),
+# try to set the full option set via GraphQL. Manual fallback printed on failure.
+have_opts=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name=="Status") | .options[]?.name' | tr '\n' '|')
+missing=0; for s in "${STAGES[@]}"; do echo "$have_opts" | grep -q "$s|" || missing=1; done
+if [[ "$missing" == "1" ]]; then
+  warn "Status field is missing some stages. Attempting to set options via API…"
+  OPTS_JSON=$(printf '%s\n' "${STAGES[@]}" | jq -R '{name:., color:GRAY, description:""}' | jq -s '.')
+  if gh api graphql -f query='
+      mutation($f:ID!,$o:[ProjectV2SingleSelectFieldOptionInput!]!){
+        updateProjectV2Field(input:{fieldId:$f, singleSelectOptions:$o}){
+          projectV2Field{ ... on ProjectV2SingleSelectField { id } } } }' \
+      -f f="$SFID" -F o="$OPTS_JSON" >/dev/null 2>&1; then
+    ok "Status options set to: ${STAGES[*]}"
+    FIELDS_JSON=$(gh project field-list "$PNUM" --owner "$OWNER" --format json --limit 50)
+  else
+    warn "Could not set options via API. Open the board → Status field and add: ${STAGES[*]}"
+  fi
+fi
+
+# ── 3. Write pipeline.env ───────────────────────────────────────────────────
+note "Writing $ENV_FILE"
+{
+  echo "# Generated by scripts/pipeline/bootstrap_github.sh — do not edit by hand."
+  echo "PROJECT_OWNER=$OWNER"
+  echo "PROJECT_NUMBER=$PNUM"
+  echo "PROJECT_ID=$PID"
+  echo "STATUS_FIELD_ID=$SFID"
+  echo "STATUS_FIELD_NAME=Status"
+  echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name=="Status") | .options[]? |
+    "STATUS_OPT_\(.name | ascii_upcase | gsub(" ";"_"))=\(.id)"'
+} > "$ENV_FILE"
+ok "Wrote IDs for $(grep -c '^STATUS_OPT_' "$ENV_FILE") stages"
+
+# ── 4. Repo merge settings (needed for native auto-merge) ───────────────────
+note "Enabling auto-merge + squash + auto-delete branches"
+gh api -X PATCH "repos/$REPO_NWO" \
+  -F allow_auto_merge=true -F allow_squash_merge=true -F delete_branch_on_merge=true >/dev/null \
+  && ok "Repo merge settings updated" || warn "Could not update repo settings (need admin)"
+
+# ── 5. Branch protection on main (require quality-gate) ─────────────────────
+note "Protecting main: require 'quality-gate' status check"
+gh api -X PUT "repos/$REPO_NWO/branches/main/protection" \
+  -H "Accept: application/vnd.github+json" \
+  -f "required_status_checks[strict]=true" \
+  -f "required_status_checks[contexts][]=quality-gate" \
+  -f "enforce_admins=false" \
+  -f "required_pull_request_reviews=" \
+  -f "restrictions=" >/dev/null 2>&1 \
+  && ok "Branch protection set" \
+  || warn "Branch protection not set (needs admin / may require JSON body — see docs/ai-pipeline.md)."
+
+# ── 6. Seed backlog ─────────────────────────────────────────────────────────
+note "Seeding backlog (only if board is empty)"
+EXISTING=$(gh project item-list "$PNUM" --owner "$OWNER" --format json --limit 5 | jq '.items | length')
+if [[ "$EXISTING" == "0" ]]; then
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    bash "$ROOT/scripts/pipeline/board.sh" add "$line" "Backlog" >/dev/null && ok "seeded: $line"
+  done < "$ROOT/scripts/pipeline/seed_features.txt"
+else
+  warn "Board already has items; skipping seed."
+fi
+
+echo
+ok "Bootstrap complete. Next: set the CLAUDE_CODE_OAUTH_TOKEN (and optional PIPELINE_PROJECT_TOKEN) secrets,"
+echo "   then move a board item to 'Ready' and run the pipeline. See docs/ai-pipeline.md."

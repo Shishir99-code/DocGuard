@@ -1,0 +1,15 @@
+# Seed backlog for the DocGuard autonomous pipeline.
+# One feature per line (blank lines and #-comments ignored). Aligned to this
+# milestone: eliminate false positives and silently-missed endpoints.
+# Edit freely, then re-run bootstrap (it only seeds when the board is empty),
+# or add individually:  scripts/pipeline/board.sh add "<title>" Ready
+Resolve APIRouter prefix chains (include_router with nested prefixes) so endpoints are not missed
+Handle Annotated[...] path/query params without flagging false drift
+Treat trailing-slash and case differences between spec and code per OpenAPI rules
+Parse routes registered via add_api_route() in addition to decorators
+Support $ref resolution in the OpenAPI spec loader before comparison
+Detect endpoints defined on router instances assigned through intermediate variables
+Skip files that fail to parse without silently dropping their sibling endpoints
+Recognize methods declared via @router.api_route(methods=[...]) multi-method routes
+Map FastAPI response_model and status_code to spec responses to reduce false positives
+Make drift comparison deterministic and stable across runs (sorted, hash-free)

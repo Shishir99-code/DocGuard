@@ -1,0 +1,111 @@
+name: AI Fix
+
+# The "send it back to the agents" half of the loop. When AI Review labels a PR
+# `ai-changes-requested`, this addresses the blocking findings (or neglects
+# non-blocking ones with a rationale) and pushes to the PR branch. The push
+# re-triggers AI Review, closing the loop. Bounded to 3 attempts to prevent runaway.
+
+on:
+  pull_request:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: ai-fix-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    # Trigger when the review requests changes, or a maintainer comments "/fix".
+    if: |
+      (github.event_name == 'pull_request' && github.event.label.name == 'ai-changes-requested') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/fix'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Attempt budget (max 3)
+        id: budget
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          labels=$(gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name')
+          used=$(echo "$labels" | grep -c '^ai-fix-attempt-' || true)
+          next=$((used + 1))
+          echo "attempt=$next" >> "$GITHUB_OUTPUT"
+          if [ "$next" -gt 3 ]; then
+            echo "abort=true" >> "$GITHUB_OUTPUT"
+            gh pr edit "$PR" --repo "$REPO" --add-label "blocked" --remove-label "ai-changes-requested" || true
+            gh pr comment "$PR" --repo "$REPO" --body "🛑 Autonomous fix budget exhausted (3 attempts). Labeling \`blocked\` for human review."
+          else
+            echo "abort=false" >> "$GITHUB_OUTPUT"
+            gh pr edit "$PR" --repo "$REPO" --add-label "ai-fix-attempt-$next" || true
+          fi
+
+      - name: Checkout PR branch
+        if: steps.budget.outputs.abort == 'false'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/pull/${{ steps.pr.outputs.number }}/head
+          # Needed so the action can push fixes back to the PR branch.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Address review findings
+        if: steps.budget.outputs.abort == 'false'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ steps.pr.outputs.number }}
+            FIX ATTEMPT: ${{ steps.budget.outputs.attempt }} of 3
+
+            The AI reviewer requested changes on this PR. The PR branch is checked
+            out in the working directory.
+
+            1. Read the reviewer's findings: `gh pr view ${{ steps.pr.outputs.number }} --comments`
+               and the inline review comments.
+            2. For each BLOCKING finding: fix the ROOT CAUSE with the minimal correct
+               change. Honor every DocGuard guardrail (Python 3.11+, AST-only parser,
+               no new runtime deps, `.docguard.yaml` back-compat, no LLM in check/report,
+               strict mypy, `from __future__ import annotations`). Never weaken a test,
+               add `# type: ignore`, or `except: pass` to silence the reviewer.
+            3. For each NON-BLOCKING finding you choose to NEGLECT: leave the code as-is
+               and post a one-line rationale via `gh pr comment` (e.g. "Neglecting:
+               naming nit, current name matches surrounding convention").
+            4. Run the gate locally before pushing:
+                 pip install -e ".[dev]" >/dev/null 2>&1 || true
+                 python -m pytest -q && ruff check . && mypy src
+               Iterate until green.
+            5. Commit each fix atomically (`fix:` / `refactor:`), end messages with
+               `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`, then:
+                 git push origin HEAD:refs/heads/${{ github.head_ref || 'pipeline-branch' }}
+               If the branch ref is unknown, push with: `git push origin HEAD`.
+            6. Remove the changes-requested label so re-review starts clean:
+                 gh pr edit ${{ steps.pr.outputs.number }} --remove-label "ai-changes-requested"
+
+            The push will re-trigger AI Review automatically. Do not merge.
+
+          claude_args: |
+            --model claude-opus-4-8
+            --max-turns 50
+            --allowedTools "Read,Edit,Write,Grep,Glob,Bash(git:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr edit:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pytest:*),Bash(ruff:*),Bash(mypy:*)"

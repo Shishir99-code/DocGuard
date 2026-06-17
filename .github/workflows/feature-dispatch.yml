@@ -1,0 +1,119 @@
+name: Feature Dispatch
+
+# The server-side "keep going without me" engine. Picks the next Ready item off
+# the Project board and runs the full implement → test → secure → open-PR pipeline
+# in CI, then hands the PR to the AI Review loop. Fires when a PR merges (start the
+# next feature immediately) and on a slow heartbeat cron as a safety net.
+
+on:
+  workflow_dispatch:
+    inputs:
+      feature:
+        description: "Optional explicit feature title (otherwise pulls next Ready board item)"
+        required: false
+        type: string
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "0 */6 * * *" # heartbeat every 6h; the merge trigger does the real chaining
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  # Hard serialize: only one feature is ever implemented at a time to avoid branch churn.
+  group: feature-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    # On the PR trigger, only proceed when it actually merged.
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Guard — skip if a pipeline PR is already in flight
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          open=$(gh pr list --repo "$REPO" --label ai-pipeline --state open --json number --jq 'length')
+          if [ "$open" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "A pipeline PR is already open; not starting another feature."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Select next feature
+        id: select
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.PIPELINE_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          INPUT_FEATURE: ${{ github.event.inputs.feature }}
+        run: |
+          if [ -n "$INPUT_FEATURE" ]; then
+            echo "feature=$INPUT_FEATURE" >> "$GITHUB_OUTPUT"
+          else
+            feat=$(bash scripts/pipeline/board.sh next-ready --title-only || true)
+            if [ -z "$feat" ]; then
+              echo "no-feature=true" >> "$GITHUB_OUTPUT"
+              echo "Board 'Ready' column is empty — nothing to dispatch."
+            else
+              echo "feature=$feat" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Run pipeline (implement → test → secure → open PR)
+        if: steps.guard.outputs.skip == 'false' && steps.select.outputs.no-feature != 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            FEATURE: ${{ steps.select.outputs.feature }}
+
+            You are DocGuard's autonomous build pipeline running in CI. Take the
+            FEATURE above from idea to an open pull request, unattended.
+
+            Guardrails (NON-NEGOTIABLE): Python 3.11+, parser stays AST-only (never
+            import/exec the analyzed repo), NO new runtime dependencies without strong
+            justification, `.docguard.yaml` stays backwards-compatible, NO LLM in the
+            check/report path, strict mypy, `from __future__ import annotations` in
+            every module, `X | Y` unions, dataclasses with `to_dict()`, exit codes 0/1/2.
+            Milestone goal: zero false positives, zero silently missed endpoints.
+
+            Steps:
+            1. `git fetch origin && git switch -c pipeline/<slug> origin/main` (slug from the feature).
+            2. PLAN: identify exact files/functions to change; abort with a PR comment if
+               the feature would break a guardrail.
+            3. IMPLEMENT in small atomic commits matching existing conventions.
+            4. TEST: add pytest cases (include a false-positive regression and a
+               missed-endpoint case where relevant). Run until green:
+                 pip install -e ".[dev]" && python -m pytest -q && ruff check . && mypy src
+            5. SECURE: verify no exec/eval of target code, safe YAML, no ReDoS, no secret leaks.
+            6. Open the PR: `git push -u origin HEAD` then `gh pr create` with a body that
+               lists acceptance criteria as checkboxes and explains the change. Add label
+               `ai-pipeline`. End the body with the Claude Code generated footer.
+            7. Move the board item to "In Review": `bash scripts/pipeline/board.sh move-title "${{ steps.select.outputs.feature }}" "In Review"` (ignore failure if the token lacks project scope).
+
+            Commit footer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+            The PR then enters the AI Review → AI Fix → Auto Merge loop automatically.
+
+          claude_args: |
+            --model claude-opus-4-8
+            --max-turns 80
+            --allowedTools "Read,Edit,Write,Grep,Glob,Bash(git:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh label:*),Bash(bash scripts/pipeline/board.sh:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pytest:*),Bash(ruff:*),Bash(mypy:*)"
