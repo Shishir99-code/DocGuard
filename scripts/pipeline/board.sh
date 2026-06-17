@@ -7,7 +7,9 @@
 #   board.sh next-ready [--title-only]      Print the first item whose Status == Ready
 #   board.sh move <item-id> "<status>"      Set an item's Status
 #   board.sh move-title "<title>" "<status>" Set Status by item title
+#   board.sh move-issue <issue#> "<status>"  Set Status by linked issue number
 #   board.sh done-pr <pr-number>            Set the item linked to a PR to Done
+#   board.sh done-issue <issue#>            Set the item linked to an issue to Done
 #   board.sh list [status]                  List items (optionally filtered by Status)
 set -euo pipefail
 
@@ -92,6 +94,18 @@ cmd_move_title() {
   cmd_move "$id" "$status"
 }
 
+cmd_move_issue() {
+  local issue="$1" status="$2" url id
+  url=$(gh issue view "$issue" --json url --jq .url)
+  id=$(items_json | jq -r --arg u "$url" '.items[] | select(.url==$u) | .id' | head -1)
+  [[ -n "$id" ]] || { echo "Issue #$issue is not on the board" >&2; exit 5; }
+  cmd_move "$id" "$status"
+}
+
+cmd_done_issue() {
+  cmd_move_issue "$1" "Done"
+}
+
 cmd_next_ready() {
   local title_only="" json first
   [[ "${1:-}" == "--title-only" ]] && title_only=1
@@ -123,11 +137,13 @@ cmd_list() {
 }
 
 case "${1:-}" in
-  add)        shift; cmd_add "$@" ;;
-  move)       shift; cmd_move "$@" ;;
-  move-title) shift; cmd_move_title "$@" ;;
-  next-ready) shift; cmd_next_ready "${1:-}" ;;
-  done-pr)    shift; cmd_done_pr "$@" ;;
-  list)       shift; cmd_list "${1:-}" ;;
+  add)         shift; cmd_add "$@" ;;
+  move)        shift; cmd_move "$@" ;;
+  move-title)  shift; cmd_move_title "$@" ;;
+  move-issue)  shift; cmd_move_issue "$@" ;;
+  next-ready)  shift; cmd_next_ready "${1:-}" ;;
+  done-pr)     shift; cmd_done_pr "$@" ;;
+  done-issue)  shift; cmd_done_issue "$@" ;;
+  list)        shift; cmd_list "${1:-}" ;;
   *) echo "Unknown command. See header of $0 for usage." >&2; exit 2 ;;
 esac

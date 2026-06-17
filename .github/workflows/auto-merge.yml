@@ -54,9 +54,15 @@ jobs:
       REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
-      - name: Move board item to Done
+      - name: Move board item(s) to Done
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "PIPELINE_PROJECT_TOKEN not set; skipping board update."; exit 0
           fi
-          bash scripts/pipeline/board.sh done-pr "$PR" || echo "board update skipped"
+          # Issue-driven PRs (Closes #N) — move each closed issue's card to Done.
+          for n in $(gh pr view "$PR" --repo "$REPO" --json closingIssuesReferences \
+                       --jq '.closingIssuesReferences[].number'); do
+            bash scripts/pipeline/board.sh done-issue "$n" || echo "skip issue #$n"
+          done
+          # Board-driven PRs whose item is linked to the PR itself.
+          bash scripts/pipeline/board.sh done-pr "$PR" || echo "no PR-linked board item"
