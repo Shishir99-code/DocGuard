@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+from typing import TYPE_CHECKING
 
-from docguard.core.models import DriftReport
+if TYPE_CHECKING:
+    from docguard.core.models import DriftReport
 
 
 def build_fix_prompt(report: DriftReport, spec_content: str) -> str:
@@ -48,7 +50,7 @@ def suggest_fix(
         )
 
     try:
-        import openai  # type: ignore[import-untyped]
+        import openai
     except ImportError as exc:
         raise RuntimeError(
             "The 'openai' package is required for auto-fix. "

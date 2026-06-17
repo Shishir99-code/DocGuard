@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
-from docguard.core.models import DriftReport
+if TYPE_CHECKING:
+    from docguard.core.models import DriftReport
 
 
 def render(report: DriftReport) -> str:

@@ -159,7 +159,10 @@ def _compare_fields(
                 code_value={"type": code_f.type, "required": code_f.required},
                 spec_value=None,
                 severity=severity,
-                message=f"Field '{name}' ({code_f.type}) exists in code but is missing from the spec.",
+                message=(
+                    f"Field '{name}' ({code_f.type}) exists in code "
+                    "but is missing from the spec."
+                ),
             ))
             continue
 
@@ -182,7 +185,10 @@ def _compare_fields(
                 code_value={"required": code_f.required},
                 spec_value={"required": spec_f.required},
                 severity=Severity.WARNING,
-                message=f"Field '{name}' required={code_f.required} in code but required={spec_f.required} in spec.",
+                message=(
+                    f"Field '{name}' required={code_f.required} in code "
+                    f"but required={spec_f.required} in spec."
+                ),
             ))
 
         # Recurse into nested fields
@@ -239,7 +245,10 @@ def _compare_params(
                 code_value={"type": code_p.type},
                 spec_value={"type": spec_p.type},
                 severity=Severity.ERROR,
-                message=f"Parameter '{name}' is '{code_p.type}' in code but '{spec_p.type}' in spec.",
+                message=(
+                    f"Parameter '{name}' is '{code_p.type}' in code "
+                    f"but '{spec_p.type}' in spec."
+                ),
             ))
 
     for name in spec_map:

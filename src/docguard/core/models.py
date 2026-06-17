@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 
 class EndpointStatus(str, enum.Enum):
@@ -52,8 +53,8 @@ class InferredField:
     nested: list[InferredField] | None = None
     default: str | None = None
 
-    def to_dict(self) -> dict:
-        result: dict = {
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
             "name": self.name,
             "type": self.type,
             "required": self.required,
@@ -95,12 +96,12 @@ class FieldDiff:
 
     type: DiffType
     location: str  # e.g. "response.body.email_verified"
-    code_value: dict | None = None
-    spec_value: dict | None = None
+    code_value: dict[str, Any] | None = None
+    spec_value: dict[str, Any] | None = None
     severity: Severity = Severity.ERROR
     message: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "type": self.type.value,
             "location": self.location,
@@ -118,11 +119,11 @@ class EndpointResult:
     path: str
     method: str
     status: EndpointStatus
-    source_location: dict | None = None  # {"file": ..., "line": ...}
-    spec_location: dict | None = None  # {"json_path": ...}
+    source_location: dict[str, Any] | None = None  # {"file": ..., "line": ...}
+    spec_location: dict[str, Any] | None = None  # {"json_path": ...}
     diffs: list[FieldDiff] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "path": self.path,
             "method": self.method,
@@ -142,7 +143,7 @@ class DriftSummary:
     missing_in_spec: int = 0
     missing_in_code: int = 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_endpoints_in_code": self.total_endpoints_in_code,
             "total_endpoints_in_spec": self.total_endpoints_in_spec,
@@ -163,12 +164,12 @@ class DriftReportMetadata:
     framework_detected: str = ""
     scan_duration_ms: int = 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "repository": self.repository,
             "commit_sha": self.commit_sha,
             "branch": self.branch,
-            "timestamp": self.timestamp or datetime.now(timezone.utc).isoformat(),
+            "timestamp": self.timestamp or datetime.now(UTC).isoformat(),
             "spec_path": self.spec_path,
             "framework_detected": self.framework_detected,
             "scan_duration_ms": self.scan_duration_ms,
@@ -186,7 +187,12 @@ class DriftReport:
     endpoints: list[EndpointResult] = field(default_factory=list)
 
     def calculate_drift_score(self) -> float:
-        total = self.summary.synced + self.summary.drifted + self.summary.missing_in_spec + self.summary.missing_in_code
+        total = (
+            self.summary.synced
+            + self.summary.drifted
+            + self.summary.missing_in_spec
+            + self.summary.missing_in_code
+        )
         if total == 0:
             return 0.0
         # Drifted and missing_in_spec carry full weight (active integration risk).
@@ -198,7 +204,7 @@ class DriftReport:
         )
         return round(weighted / total, 4)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "$schema": "https://docguard.dev/schemas/drift-report-v1.json",
             "version": self.version,

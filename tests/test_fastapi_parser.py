@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from docguard.parsers.fastapi_parser import FastAPIParser
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TestFastAPIParser:
@@ -33,7 +36,9 @@ class TestFastAPIParser:
         endpoints = self.parser.extract_endpoints([sample_app_path])
         ep = next(e for e in endpoints if e.path == "/users" and e.method == "GET")
         for p in ep.query_params:
-            assert p.required is False, f"Query param '{p.name}' should not be required (has default)"
+            assert p.required is False, (
+                f"Query param '{p.name}' should not be required (has default)"
+            )
 
     def test_post_users_status_code(self, sample_app_path: Path) -> None:
         endpoints = self.parser.extract_endpoints([sample_app_path])

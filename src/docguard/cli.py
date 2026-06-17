@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import sys
 import time
 from pathlib import Path
 
@@ -123,9 +121,13 @@ def init(
 def check(
     spec: str | None = typer.Option(None, "--spec", "-s", help="Path to OpenAPI spec"),
     source: str | None = typer.Option(None, "--source", "-d", help="Source directory to scan"),
-    framework: str | None = typer.Option(None, "--framework", "-f", help="Force framework detection"),
+    framework: str | None = typer.Option(
+        None, "--framework", "-f", help="Force framework detection"
+    ),
     fmt: str | None = typer.Option(None, "--format", help="Output format: text, json, github"),
-    fail_on: str | None = typer.Option(None, "--fail-on", help="Failure threshold: any, drift-only, missing"),
+    fail_on: str | None = typer.Option(
+        None, "--fail-on", help="Failure threshold: any, drift-only, missing"
+    ),
     ignore: list[str] | None = typer.Option(None, "--ignore", help="Glob patterns to ignore"),
 ) -> None:
     """Run drift detection against the OpenAPI spec."""
@@ -254,7 +256,9 @@ def report(
     spec: str | None = typer.Option(None, "--spec", "-s", help="Path to OpenAPI spec"),
     source: str | None = typer.Option(None, "--source", "-d", help="Source directory to scan"),
     framework: str | None = typer.Option(None, "--framework", "-f", help="Force framework"),
-    output: str | None = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)"),
+    output: str | None = typer.Option(
+        None, "--output", "-o", help="Output file path (default: stdout)"
+    ),
 ) -> None:
     """Generate a full drift report in JSON format."""
     start = time.monotonic()
