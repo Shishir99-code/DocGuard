@@ -33,7 +33,7 @@ Consult and update your **project memory** (`.claude/agent-memory/pipeline-orche
 
 4. **Implement.** Spawn `feature-implementer` with the plan. It writes code in small atomic commits.
 
-5. **Test.** Spawn `test-author` to add/extend tests and run the full suite. It must return GREEN (`pytest`, `ruff check`, `mypy`). If red, send the failures back to `feature-implementer` (resume it) — iterate up to 3 cycles, then escalate to the board with a blocked label.
+5. **Test.** Spawn `test-author` to add/extend tests and run the full suite. It must return GREEN (`pytest`, `ruff check`, `mypy`) **and** run the real-repo E2E gate (`scripts/pipeline/e2e.sh` / `pytest -m e2e`), which runs DocGuard against real OSS repos and treats any false positive as blocking (cases skip cleanly when offline). If red, send the failures back to `feature-implementer` (resume it) — iterate up to 3 cycles, then escalate to the board with a blocked label.
 
 6. **Secure.** Spawn `pipeline-security-auditor`. It verifies no injection via AST handling, no secret leakage, safe subprocess/file use. Blocking findings go back to `feature-implementer`.
 
