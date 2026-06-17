@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from docguard.parsers.fastapi_parser import FastAPIParser
+from docguard.parsers.flask_parser import FlaskParser
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 
 _PARSERS: list[FrameworkParser] = [
     FastAPIParser(),
+    FlaskParser(),
 ]
 
 

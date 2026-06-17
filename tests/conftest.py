@@ -20,6 +20,11 @@ def sample_app_path() -> Path:
 
 
 @pytest.fixture
+def sample_flask_app_path() -> Path:
+    return FIXTURES_DIR / "sample_flask_app.py"
+
+
+@pytest.fixture
 def sample_spec_path() -> Path:
     return FIXTURES_DIR / "sample_openapi.yaml"
 
