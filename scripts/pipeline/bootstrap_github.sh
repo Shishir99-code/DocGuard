@@ -53,34 +53,20 @@ else
 fi
 PID=$(gh project view "$PNUM" --owner "$OWNER" --format json | jq -r '.id')
 
-# Status field + options
+# Stage field — a dedicated single-select field we fully control (avoids fighting the
+# built-in "Status" field, whose options can't be reliably set via the CLI).
+STAGE_FIELD_NAME="Stage"
 FIELDS_JSON=$(gh project field-list "$PNUM" --owner "$OWNER" --format json --limit 50)
-SFID=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name=="Status") | .id' | head -1)
+SFID=$(echo "$FIELDS_JSON" | jq -r --arg n "$STAGE_FIELD_NAME" '.fields[] | select(.name==$n) | .id' | head -1)
 if [[ -z "${SFID:-}" || "$SFID" == "null" ]]; then
-  warn "No 'Status' field found; creating one with our stages."
-  gh project field-create "$PNUM" --owner "$OWNER" --name "Status" \
+  note "Creating '$STAGE_FIELD_NAME' field with options: ${STAGES[*]}"
+  gh project field-create "$PNUM" --owner "$OWNER" --name "$STAGE_FIELD_NAME" \
      --data-type SINGLE_SELECT --single-select-options "$(IFS=,; echo "${STAGES[*]}")" >/dev/null
   FIELDS_JSON=$(gh project field-list "$PNUM" --owner "$OWNER" --format json --limit 50)
-  SFID=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name=="Status") | .id' | head -1)
-fi
-
-# Verify every stage has an option; if some are missing (built-in Status had Todo/Done/...),
-# try to set the full option set via GraphQL. Manual fallback printed on failure.
-have_opts=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name=="Status") | .options[]?.name' | tr '\n' '|')
-missing=0; for s in "${STAGES[@]}"; do echo "$have_opts" | grep -q "$s|" || missing=1; done
-if [[ "$missing" == "1" ]]; then
-  warn "Status field is missing some stages. Attempting to set options via API…"
-  OPTS_JSON=$(printf '%s\n' "${STAGES[@]}" | jq -R '{name:., color:GRAY, description:""}' | jq -s '.')
-  if gh api graphql -f query='
-      mutation($f:ID!,$o:[ProjectV2SingleSelectFieldOptionInput!]!){
-        updateProjectV2Field(input:{fieldId:$f, singleSelectOptions:$o}){
-          projectV2Field{ ... on ProjectV2SingleSelectField { id } } } }' \
-      -f f="$SFID" -F o="$OPTS_JSON" >/dev/null 2>&1; then
-    ok "Status options set to: ${STAGES[*]}"
-    FIELDS_JSON=$(gh project field-list "$PNUM" --owner "$OWNER" --format json --limit 50)
-  else
-    warn "Could not set options via API. Open the board → Status field and add: ${STAGES[*]}"
-  fi
+  SFID=$(echo "$FIELDS_JSON" | jq -r --arg n "$STAGE_FIELD_NAME" '.fields[] | select(.name==$n) | .id' | head -1)
+  ok "Created '$STAGE_FIELD_NAME' field"
+else
+  ok "'$STAGE_FIELD_NAME' field already exists"
 fi
 
 # ── 3. Write pipeline.env ───────────────────────────────────────────────────
@@ -91,8 +77,8 @@ note "Writing $ENV_FILE"
   echo "PROJECT_NUMBER=$PNUM"
   echo "PROJECT_ID=$PID"
   echo "STATUS_FIELD_ID=$SFID"
-  echo "STATUS_FIELD_NAME=Status"
-  echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name=="Status") | .options[]? |
+  echo "STATUS_FIELD_NAME=$STAGE_FIELD_NAME"
+  echo "$FIELDS_JSON" | jq -r --arg n "$STAGE_FIELD_NAME" '.fields[] | select(.name==$n) | .options[]? |
     "STATUS_OPT_\(.name | ascii_upcase | gsub(" ";"_"))=\(.id)"'
 } > "$ENV_FILE"
 ok "Wrote IDs for $(grep -c '^STATUS_OPT_' "$ENV_FILE") stages"
@@ -105,15 +91,12 @@ gh api -X PATCH "repos/$REPO_NWO" \
 
 # ── 5. Branch protection on main (require quality-gate) ─────────────────────
 note "Protecting main: require 'quality-gate' status check"
-gh api -X PUT "repos/$REPO_NWO/branches/main/protection" \
-  -H "Accept: application/vnd.github+json" \
-  -f "required_status_checks[strict]=true" \
-  -f "required_status_checks[contexts][]=quality-gate" \
-  -f "enforce_admins=false" \
-  -f "required_pull_request_reviews=" \
-  -f "restrictions=" >/dev/null 2>&1 \
-  && ok "Branch protection set" \
-  || warn "Branch protection not set (needs admin / may require JSON body — see docs/ai-pipeline.md)."
+# The protection endpoint requires a full JSON body with explicit nulls; the
+# `-f key=value` form can't send null, so pipe a JSON document via --input.
+printf '%s' '{"required_status_checks":{"strict":true,"contexts":["quality-gate"]},"enforce_admins":false,"required_pull_request_reviews":null,"restrictions":null}' \
+  | gh api -X PUT "repos/$REPO_NWO/branches/main/protection" --input - >/dev/null 2>&1 \
+  && ok "Branch protection set (requires quality-gate)" \
+  || warn "Branch protection not set — needs admin, or private repo on a free plan (see docs/ai-pipeline.md)."
 
 # ── 6. Seed backlog ─────────────────────────────────────────────────────────
 note "Seeding backlog (only if board is empty)"
