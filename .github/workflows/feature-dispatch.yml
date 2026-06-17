@@ -8,8 +8,12 @@ name: Feature Dispatch
 on:
   workflow_dispatch:
     inputs:
+      issue:
+        description: "Issue number to build (highest priority). The PR will close it."
+        required: false
+        type: string
       feature:
-        description: "Optional explicit feature title (otherwise pulls next Ready board item)"
+        description: "Explicit feature title (used only if 'issue' is empty; else next Ready item)"
         required: false
         type: string
   pull_request:
@@ -48,13 +52,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          INPUT_ISSUE: ${{ github.event.inputs.issue }}
+          INPUT_FEATURE: ${{ github.event.inputs.feature }}
         run: |
-          open=$(gh pr list --repo "$REPO" --label ai-pipeline --state open --json number --jq 'length')
-          if [ "$open" -gt 0 ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "A pipeline PR is already open; not starting another feature."
-          else
+          # An explicit issue/feature dispatch is a deliberate request — never block it.
+          if [ -n "$INPUT_ISSUE" ] || [ -n "$INPUT_FEATURE" ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Explicit dispatch — bypassing the in-flight guard."
+          else
+            open=$(gh pr list --repo "$REPO" --label ai-pipeline --state open --json number --jq 'length')
+            if [ "$open" -gt 0 ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "A pipeline PR is already open; not starting another feature."
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Select next feature
@@ -63,9 +75,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PIPELINE_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          INPUT_ISSUE: ${{ github.event.inputs.issue }}
           INPUT_FEATURE: ${{ github.event.inputs.feature }}
         run: |
-          if [ -n "$INPUT_FEATURE" ]; then
+          if [ -n "$INPUT_ISSUE" ]; then
+            title=$(gh issue view "$INPUT_ISSUE" --repo "$REPO" --json title --jq .title)
+            echo "issue=$INPUT_ISSUE" >> "$GITHUB_OUTPUT"
+            echo "feature=$title" >> "$GITHUB_OUTPUT"
+            echo "Building issue #$INPUT_ISSUE: $title"
+          elif [ -n "$INPUT_FEATURE" ]; then
             echo "feature=$INPUT_FEATURE" >> "$GITHUB_OUTPUT"
           else
             feat=$(bash scripts/pipeline/board.sh next-ready --title-only || true)
@@ -85,9 +103,15 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
             FEATURE: ${{ steps.select.outputs.feature }}
+            ISSUE: ${{ steps.select.outputs.issue }}
 
             You are DocGuard's autonomous build pipeline running in CI. Take the
             FEATURE above from idea to an open pull request, unattended.
+
+            If ISSUE is set, it is the authoritative spec: run
+            `gh issue view ${{ steps.select.outputs.issue }} --repo ${{ github.repository }} --comments`
+            and implement exactly its acceptance criteria. The PR body MUST contain
+            `Closes #${{ steps.select.outputs.issue }}` so merging closes the issue.
 
             Guardrails (NON-NEGOTIABLE): Python 3.11+, parser stays AST-only (never
             import/exec the analyzed repo), NO new runtime dependencies without strong
@@ -106,9 +130,13 @@ jobs:
                  pip install -e ".[dev]" && python -m pytest -q && ruff check . && mypy src
             5. SECURE: verify no exec/eval of target code, safe YAML, no ReDoS, no secret leaks.
             6. Open the PR: `git push -u origin HEAD` then `gh pr create` with a body that
-               lists acceptance criteria as checkboxes and explains the change. Add label
+               lists acceptance criteria as checkboxes and explains the change. If ISSUE is
+               set, include `Closes #${{ steps.select.outputs.issue }}` in the body. Add label
                `ai-pipeline`. End the body with the Claude Code generated footer.
-            7. Move the board item to "In Review": `bash scripts/pipeline/board.sh move-title "${{ steps.select.outputs.feature }}" "In Review"` (ignore failure if the token lacks project scope).
+            7. Move the board item to "In Review": if ISSUE is set use
+               `bash scripts/pipeline/board.sh move-issue ${{ steps.select.outputs.issue }} "In Review"`,
+               otherwise `bash scripts/pipeline/board.sh move-title "${{ steps.select.outputs.feature }}" "In Review"`
+               (ignore failure if the token lacks project scope).
 
             Commit footer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
             The PR then enters the AI Review → AI Fix → Auto Merge loop automatically.
@@ -116,4 +144,4 @@ jobs:
           claude_args: |
             --model claude-opus-4-8
             --max-turns 80
-            --allowedTools "Read,Edit,Write,Grep,Glob,Bash(git:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh label:*),Bash(bash scripts/pipeline/board.sh:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pytest:*),Bash(ruff:*),Bash(mypy:*)"
+            --allowedTools "Read,Edit,Write,Grep,Glob,Bash(git:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(gh label:*),Bash(bash scripts/pipeline/board.sh:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pytest:*),Bash(ruff:*),Bash(mypy:*)"
