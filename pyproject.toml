@@ -92,4 +92,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not e2e'"
+markers = [
+    "e2e: end-to-end tests that clone real OSS repositories (network required; skipped offline). Run with `pytest -m e2e` or scripts/pipeline/e2e.sh.",
+]
